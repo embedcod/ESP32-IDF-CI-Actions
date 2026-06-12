@@ -1,6 +1,6 @@
 ESP-IDF CI Build System
 =======================
-You can just folk this repo and update it your project folder files and follow the steps below.
+You can just folk this repo and update it with your project folder files and follow the steps below to execute.
 
 # How to Run the Build on GitHub
 Since we are managing everything directly via the browser, follow these steps to trigger the compilation:
