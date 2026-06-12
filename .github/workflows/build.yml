@@ -1,0 +1,72 @@
+name: CI Build System
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_chip:
+        description: 'Target Microcontroller (e.g., esp32, esp32s3, esp32c3)'
+        required: true
+        default: 'esp32s3'
+      app_bin_name:
+        description: 'Desired name for your application binary (without .bin extension)'
+        required: true
+        default: 'application_v1.0'
+
+# Environment override to suppress Node.js deprecation warnings on the runner
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Cache ESP-IDF Tools & ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.espressif
+            ~/.ccache
+          key: ${{ runner.os }}-esp-idf-${{ github.event.inputs.target_chip }}
+          restore-keys: |
+            ${{ runner.os }}-esp-idf-
+
+      - name: Compile ESP32 Project
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: 'v5.3.1' # Pinned directly to your exact laptop version
+          target: ${{ github.event.inputs.target_chip }}
+          path: '.'
+
+      - name: Stage and Rename Binary Artifacts
+        run: |
+          mkdir -p firmware_binaries
+          
+          # Copy standard bootloader and partition table
+          cp build/bootloader/bootloader.bin firmware_binaries/bootloader.bin
+          cp build/partition_table/partition-table.bin firmware_binaries/partition-table.bin
+          
+          # Dynamically locate the main compiled app binary and rename it to your input choice
+          MAIN_BIN=$(find build -maxdepth 1 -name "*.bin" ! -name "bootloader.bin" ! -name "partition-table.bin" | head -n 1)
+          
+          if [ -n "$MAIN_BIN" ]; then
+            cp "$MAIN_BIN" "firmware_binaries/${{ github.event.inputs.app_bin_name }}.bin"
+            echo "Successfully renamed application binary to: ${{ github.event.inputs.app_bin_name }}.bin"
+          else
+            echo "ERROR: Main application binary not found in build folder!" && exit 1
+          fi
+          
+          echo "Staged binaries for download:"
+          ls -l firmware_binaries/
+
+      - name: Upload Binaries as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_bin_name }}-binaries
+          path: firmware_binaries/
+          retention-days: 7
